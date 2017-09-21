@@ -4,6 +4,7 @@ from unittest import TestCase
 import matplotlib.pyplot as plt
 
 from pylinac import WinstonLutz
+from pylinac.winston_lutz import GANTRY, COLLIMATOR, COUCH
 from pylinac.core.geometry import Vector, vector_is_close
 from tests import TEST_BANK_DIR
 from tests.utils import save_file, LoadingTestBase, LocationMixin
@@ -11,7 +12,7 @@ from tests.utils import save_file, LoadingTestBase, LocationMixin
 
 class TestWLLoading(LoadingTestBase, TestCase):
     klass = WinstonLutz
-    demo_method = 'from_demo_images'
+    demo_load_method = 'from_demo_images'
     url = 'winston_lutz.zip'
 
 
@@ -39,7 +40,6 @@ class TestPlottingSaving(TestCase):
 
     def test_plot(self):
         self.wl.plot_images()  # shouldn't raise
-        self.wl.plot_gantry_sag()
 
     def test_save(self):
         save_file(self.wl.save_summary)
@@ -50,9 +50,9 @@ class WinstonLutzMixin(LocationMixin):
     dir_location = osp.join(TEST_BANK_DIR, 'Winston-Lutz')
     num_images = 0
     zip = True
+    gantry_deviation = None
     gantry_iso_size = 0
     gantry_iso2bb_vector = Vector
-    gantry_sag = 0
     collimator_iso_size = 0
     collimator_iso2bb_vector = Vector
     couch_iso_size = 0
@@ -83,9 +83,6 @@ class WinstonLutzMixin(LocationMixin):
         self.assertTrue(vector_is_close(self.wl.gantry_iso2bb_vector, self.gantry_iso2bb_vector),
                         msg="{} was != {} within {}".format(self.wl.gantry_iso2bb_vector, self.gantry_iso2bb_vector, 0.2))
 
-    def test_gantry_sag(self):
-        self.assertAlmostEqual(self.wl.gantry_sag(), self.gantry_sag, delta=0.15)
-
     def test_collimator_iso(self):
         # test iso size
         if self.collimator_iso_size is not None:
@@ -104,10 +101,13 @@ class WinstonLutzMixin(LocationMixin):
             self.assertTrue(vector_is_close(self.wl.couch_iso2bb_vector, self.couch_iso2bb_vector),
                             msg="{} was != {}".format(self.wl.couch_iso2bb_vector, self.couch_iso2bb_vector))
 
+    def test_axis_deviation(self):
+        if self.gantry_deviation is not None:
+            self.assertAlmostEqual(self.wl.axis_rms_deviation(GANTRY, value='range'), self.gantry_deviation, delta=0.2)
+
 
 class WLDemo(WinstonLutzMixin, TestCase):
     num_images = 17
-    gantry_sag = 0.9
     gantry_iso_size = 1
     gantry_iso2bb_vector = Vector(-0.4, 0.2, -0.5)
     collimator_iso_size = 1.2
@@ -115,6 +115,7 @@ class WLDemo(WinstonLutzMixin, TestCase):
     couch_iso_size = 3.5
     couch_iso2bb_vector = Vector(1.3, -0.7, 0)
     variable_axes = {0: 'Reference'}
+    gantry_deviation = 0.9
 
     @classmethod
     def setUpClass(cls):

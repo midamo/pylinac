@@ -54,7 +54,7 @@ the same coordinate space as `Winkler et al`_. All coordinates are looking from 
 
 * **X-axis** - Lateral, or left-right, with right being positive.
 * **Y-axis** - Anterior-Posterior, or up-down, with up being positive.
-* **Z-axis** - Cranio-Caudal, or in-out, with out being positive.
+* **Z-axis** - Gun-Target, or in-out, with out/Target being positive.
 
 Typical Use
 -----------
@@ -82,6 +82,32 @@ And that's it! Once loaded you can view images, gantry sag, or print the results
     wl.save_plots('wltest.png')
     # return the gantry isocenter relative to the BB
     wl.gantry_iso2bb_vector
+    # print to PDF
+    wl.publish_pdf('mywl.pdf')
+
+.. _using_file_names_wl:
+
+Using File Names
+----------------
+
+If your linac EPID images do not include axis information (such as Elekta) you can specify it in the file name.
+Any and all of the three axes can be defined. If one is not defined and is not in the DICOM tags, it will default to 0.
+The syntax to define the axes: "*gantry0*coll0*couch0*". There can be any text before, after, or in between each axis definition.
+However, the axes numerical value *must* immediately follow the axis name. Axis names are also fixed. The following examples
+are valid:
+
+* MyWL-gantry0-coll90-couch315.dcm
+* gantry90_stuff_coll45-couch0.dcm
+* abc-couch45-gantry315-coll0.dcm
+* 01-gantry0-abcd-coll30couch10abc.dcm
+* abc-gantry30.dcm
+* coll45abc.dcm
+
+The following are invalid:
+
+* mywl-gantry=0-coll=90-couch=315.dcm
+* gan45_collimator30-table270.dcm
+
 
 Algorithm
 ---------
@@ -103,6 +129,7 @@ The algorithm works like such:
     .. warning:: Analysis can fail or give unreliable results if any Restriction is violated.
 
 * The BB must be fully within the field of view.
+* The BB must be within 2.5cm of the real isocenter.
 * The images must be acquired with the EPID.
 
 **Analysis**
@@ -120,7 +147,7 @@ The algorithm works like such:
 
 * **Backproject the CAX for gantry images** -- Based on the vector of the BB to the field CAX and the gantry angle,
   a 3D line projection of the CAX is constructed. The BB is considered at the origin. Only images where the
-  collimator and couch were at 0 are used for CAX projection lines.
+  couch was at 0 are used for CAX projection lines.
 
 * **Determine gantry isocenter size and location** - Using the backprojection lines, an optimization function is run
   to minimize the maximum distance to any line. The optimized distance is the isocenter radius, and the point

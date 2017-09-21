@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from scipy import ndimage
 from scipy.interpolate import interp1d
 
+from .utilities import is_float_like, is_int_like
 from .decorators import value_accept
 from .geometry import Point, Circle
 
@@ -36,7 +37,10 @@ def stretch(array, min=0, max=1, fill_dtype=None):
     new_max = max
     new_min = min
     if fill_dtype is not None:
-        di = np.iinfo(fill_dtype)
+        try:
+            di = np.iinfo(fill_dtype)
+        except ValueError:
+            di = np.finfo(fill_dtype)
         new_max = di.max
         new_min = di.min
     # perfectly normalize the array (0..1)
@@ -100,17 +104,17 @@ class ProfileMixin:
 
         Parameters
         ----------
-        size : int, float
+        size : float, int
             Size of the median filter to apply.
             If a float, the size is the ratio of the length. Must be in the range 0-1.
             E.g. if size=0.1 for a 1000-element array, the filter will be 100 elements.
             If an int, the filter is the size passed.
         kind : {'median', 'gaussian'}
-            The kind of filter to apply. If gaussian, *size* is the sigma value.
+            The kind of filter to apply. If gaussian, `size` is the sigma value.
         """
         if isinstance(size, float):
             if 0 < size < 1:
-                size *= len(self.values)
+                size = int(round(len(self.values)*size))
                 size = max(size, 1)
             else:
                 raise TypeError("Float was passed but was not between 0 and 1")
@@ -362,6 +366,8 @@ class SingleProfile(ProfileMixin):
         fwxm = self.fwxm(x, interpolate=interpolate)
         li = self._penumbra_point(LEFT, x, interpolate)
         fwxmcen = np.abs(li + fwxm / 2)
+        if not interpolate:
+            fwxmcen = int(round(fwxmcen))
         if kind == VALUE:
             return self.values[fwxmcen] if not interpolate else self._values_interp[int(fwxmcen*self.interpolation_factor)]
         else:
@@ -443,8 +449,8 @@ class SingleProfile(ProfileMixin):
         """
         fwhmc = self.fwxm_center()
         field_width *= self.fwxm()
-        left = round(fwhmc - field_width / 2)
-        right = round(fwhmc + field_width / 2)
+        left = int(round(fwhmc - field_width / 2))
+        right = int(round(fwhmc + field_width / 2))
         return left, right
 
     @value_accept(field_width=(0, 1), calculation=('mean', 'median', 'max', 'min', 'area'))
@@ -940,16 +946,27 @@ def peak_detect(values, threshold=None, min_distance=10, max_number=None, search
 
     """Limit search to search region"""
     left_end = search_region[0]
-    if isinstance(left_end, float):
+    if is_float_like(left_end):
         left_index = int(left_end*len(values))
-    elif isinstance(left_end, int):
+    elif is_int_like(left_end):
         left_index = left_end
+    else:
+        raise ValueError("{} must be a float or int".format(left_end))
 
     right_end = search_region[1]
-    if isinstance(right_end, float):
+    if is_float_like(right_end):
         right_index = int(right_end * len(values))
-    elif isinstance(right_end, int):
+    elif is_int_like(right_end):
         right_index = right_end
+    else:
+        raise ValueError("{} must be a float or int".format(right_end))
+
+    # minimum peak spacing calc
+    if isinstance(min_distance, float):
+        if 0 > min_distance >= 1:
+            raise ValueError("When min_peak_width is passed a float, value must be between 0 and 1")
+        else:
+            min_distance = int(min_distance * len(values))
 
     values = values[left_index:right_index]
 
@@ -1012,12 +1029,6 @@ def peak_detect(values, threshold=None, min_distance=10, max_number=None, search
 
     """Enforce the min_peak_distance by removing smaller peaks."""
     # For each peak, determine if the next peak is within the min peak width range.
-    if isinstance(min_distance, float):
-        if 0 > min_distance >= 1:
-            raise ValueError("When min_peak_width is passed a float, value must be between 0 and 1")
-        else:
-            min_distance = int(min_distance * len(values))
-
     index = 0
     while index < len(peak_idxs) - 1:
 

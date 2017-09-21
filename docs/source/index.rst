@@ -10,7 +10,8 @@
 
    overview
    installation
-   getting_started
+   general_tips
+   tg51_docs
    starshot_docs
    vmat_docs
    cbct_docs

@@ -10,8 +10,8 @@ Features:
 * **Automatic identification using file names** - If your file names are clear, the image type and test type don't even
   have to be specified; just load and analyze.
 """
-import os
 import os.path as osp
+import io
 from itertools import zip_longest
 
 import matplotlib.pyplot as plt
@@ -20,9 +20,11 @@ import numpy as np
 from .core import image
 from .core.decorators import value_accept, type_accept
 from .core.geometry import Point, Rectangle
-from .core.io import get_url, TemporaryZipDirectory
+from .core.io import get_url, TemporaryZipDirectory, retrieve_demo_file
+from .core import pdf
 from .core.profile import SingleProfile
-from .core.utilities import typed_property, import_mpld3, retrieve_demo_file
+from .core.utilities import typed_property, import_mpld3
+from .settings import get_dicom_cmap
 
 # test types
 DRGS = 'drgs'
@@ -112,7 +114,7 @@ class VMAT:
 
     @classmethod
     @value_accept(type=(DRGS, DRMLC))
-    def from_demo_images(cls, type='drgs'):
+    def from_demo_images(cls, type=DRGS):
         """Construct a VMAT instance using the demo images.
 
         Parameters
@@ -260,7 +262,7 @@ class VMAT:
         plt.savefig(filename, **kwargs)
 
     @value_accept(subimage=(DMLC, OPEN, PROFILE))
-    def plot_analyzed_subimage(self, subimage='dmlc', show=True, ax=None):
+    def plot_analyzed_subimage(self, subimage=DMLC, show=True, ax=None):
         """Plot an individual piece of the VMAT analysis.
 
         Parameters
@@ -281,10 +283,11 @@ class VMAT:
                 img = self.image_dmlc
             elif subimage == OPEN:
                 img = self.image_open
-            ax.imshow(img, cmap=plt.cm.Greys)
+            ax.imshow(img, cmap=get_dicom_cmap())
             self.segments.draw(ax)
             plt.sca(ax)
             plt.axis('off')
+            plt.tight_layout()
 
         # plot profile
         elif subimage == PROFILE:
@@ -297,7 +300,8 @@ class VMAT:
         if show:
             plt.show()
 
-    def save_analyzed_subimage(self, filename, subimage='dmlc', interactive=False, **kwargs):
+    @value_accept(subimage=(DMLC, OPEN, PROFILE))
+    def save_analyzed_subimage(self, filename, subimage=DMLC, interactive=False, **kwargs):
         """Save a subplot to file.
 
         Parameters
@@ -357,11 +361,38 @@ class VMAT:
         elif self.settings.test_type == DRMLC:
             string = ('Dose Rate & MLC Speed \nTest Results (Tol. +/-{0:2.1f}%): {1!s}\n'.format(self.settings.tolerance * 100, passfail_str))
 
-        string += ('Max Deviation: %4.3f%%\n'
-                   'Absolute Mean Deviation: %4.3f%%' %
-                   (self.max_r_deviation, self.avg_abs_r_deviation))
+        string += 'Max Deviation: {:2.3f}%\nAbsolute Mean Deviation: {:2.3f}%'.format(self.max_r_deviation, self.avg_abs_r_deviation)
 
         return string
+
+    def publish_pdf(self, filename, author=None, unit=None, notes=None, open_file=False):
+        """Publish (print) a PDF containing the analysis and quantitative results.
+
+        Parameters
+        ----------
+        filename : (str, file-like object}
+            The file to write the results to.
+        """
+        from reportlab.lib.units import cm
+        canvas = pdf.create_pylinac_page_template(filename, file_name=osp.basename(self.image_open.path) + ", " + osp.basename(self.image_dmlc.path),
+                                                  analysis_title='{} VMAT Analysis'.format(self.settings.test_type.upper()), author=author, unit=unit)
+        for y, x, width, img in zip((10, 10, 1), (1, 11, 4), (9, 9, 16), (OPEN, DMLC, PROFILE)):
+            data = io.BytesIO()
+            self.save_analyzed_subimage(data, subimage=img)
+            img = pdf.create_stream_image(data)
+            canvas.drawImage(img, x * cm, y * cm, width=width * cm, height=18 * cm, preserveAspectRatio=True)
+        text = ['{} VMAT results:'.format(self.settings.test_type.upper()),
+                'Source-to-Image Distance (mm): {:2.0f}'.format(self.image_open.sid),
+                'Tolerance (mm): {:2.1f}'.format(self.settings.tolerance),
+                'X-offset applied (pixels): {:2.0f}'.format(self.settings.x_offset),
+                'Absolute mean deviation (%): {:2.2f}'.format(self.avg_abs_r_deviation),
+                'Maximum deviation (%): {:2.2f}'.format(self.max_r_deviation),
+                ]
+        pdf.draw_text(canvas, x=10 * cm, y=25.5 * cm, text=text)
+        if notes is not None:
+            pdf.draw_text(canvas, x=1 * cm, y=5.5 * cm, fontsize=14, text="Notes:")
+            pdf.draw_text(canvas, x=1 * cm, y=5 * cm, text=notes)
+        pdf.finish(canvas, open_file=open_file, filename=filename)
 
 
 class SegmentManager:

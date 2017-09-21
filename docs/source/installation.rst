@@ -16,7 +16,7 @@ Using ``conda``
 ^^^^^^^^^^^^^^^
 
 The first and recommended way to get ``pylinac`` is through ``conda``.
-Make sure you have ``conda`` first (:ref:`distro_stack`). Add my channel to your conda configuration, and then install:
+Make sure you have ``conda`` first (see :ref:`distro_stack`). Add my channel to your conda configuration, and then install:
 
 .. code-block:: bash
 
@@ -55,28 +55,21 @@ Dependencies
 
 Pylinac, as a scientific package, has fairly standard scientific dependencies (>= means at least that version or newer):
 
-* numpy >= 1.9
-* scipy >= 0.15
-* matplotlib >= 1.3.1
+* numpy >= 1.11
+* scipy >= 0.17
+* matplotlib >= 1.4
 * pydicom >= 0.9.9
-* Pillow >= 2.5
-* scikit-image >= 0.11
+* Pillow >= 4.0
+* scikit-image >= 0.12
+* scikit-learn >= 0.18
+* tqdm == 3.8
+* click
+* pyyaml >= 3.10
+* yagmail
+* mpld3
+* reportlab >= 3.3
 
 See the numpy/scipy installation `instructions <http://docs.scipy.org/doc/numpy/user/install.html>`_ if you don't yet have them.
-
-Optional dependencies:
-
- * mpld3 >= 0.2 -- For making interactive HTML plots.
-
-To use the pylinac console script a few additional dependencies are needed:
-
- * watchdog
- * click
- * pyyaml
- * yagmail (only if email settings are configured)
-
-To install these console dependencies in one go, run ``pip install pylinac[console]``. Otherwise, install
-them individually.
 
 I'm new to Python
 -----------------

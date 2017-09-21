@@ -3,6 +3,346 @@
 Changelog
 =========
 
+V 2.0.0
+-------
+
+General
+^^^^^^^
+
+* Version 2.0 is here! It may or may not be a real major version update worthy of '2.0', but '1.10' just didn't sound as good =)
+* A GUI has been added! Most major modules have been added to the GUI. The GUI is a very simple
+  interface that will load files and publish a PDF/process files. To start the gui run the `gui()` function like
+  so:
+
+  .. code-block:: python
+
+    import pylinac
+    pylinac.gui()
+
+  You may also start the GUI from the command line:
+
+  .. code-block:: bash
+
+    pylinac gui
+
+  The GUI is a result of a few causes. Many physicists don't know how to code; this should remove that barrier
+  and allow Pylinac to get even more exposure. I have always felt the web was the future, and it likely is, but
+  pylinac should be able to run on it's own, and because a rudimentary GUI is relatively easy, I've finally made it.
+  The GUI is also free to use and has no hosting costs (unlike assuranceQA.com). Also, due to other ventures, a new job, and a
+  newborn, I couldn't devote further time to the assuranceQA site--A native GUI is much easier
+  albeit much more primitive.
+* Some module PDF methods now don't require filenames. If one is not passed it will default to the name of the file analyzed.
+  E.g. "abc123.dcm" would become "abc123.pdf". Modules where multiple images may be passed (e.g. a CBCT directory) still requires a filename.
+* PDF methods now have a boolean parameter to open the file after publishing: ``open_file``.
+* A number of dependencies have been bumped. Some were for specific reasons and others were just out of good practice.
+
+Watcher
+^^^^^^^
+
+* Closes `#84 <https://github.com/jrkerns/pylinac/issues/84>`_ Which would overwrite the resulting zip and PDF of
+  initially unzipped CBCTs performed on the same day. I.e. multiple CBCTs would result in only 1 zip/PDF. The image
+  timestamp has been edited so that it will include the hour-minute-second of the CBCT to avoid conflict.
+* Closes `#86 <https://github.com/jrkerns/pylinac/issues/86>`_ - Which had a discrepancy between the YAML config setting of the file source directories
+  and what the watcher was looking for.
+
+CatPhan
+^^^^^^^
+
+* Closes `#85 <https://github.com/jrkerns/pylinac/issues/85>`_ Which displayed the nominal CBCT slice width on PDF reports,
+  not the detected width for the CatPhan504 & CatPhan600.
+* Closes `#89 <https://github.com/jrkerns/pylinac/issues/89>`_ which had variables swapped in the CatPhan503 PDF.
+* The ``contrast_threshold`` parameter has been renamed to ``cnr_threshold``. The meaning and values are the same, but has been
+  renamed to be consistent with other changes to the ``roi`` module.
+* Due to various problems with the SVM classifier, the default setting of the classifier has been set to ``False``.
+
+Planar Phantoms
+^^^^^^^^^^^^^^^
+
+* The Las Vegas phantom has been added to the planar imaging module. It's use case is very similar to the existing planar
+  phantoms:
+
+  .. code-block:: python
+
+    from pylinac import LasVegas
+
+    lv = LasVegas('myfile.dcm')
+    lv.analyze()
+    lv.publish_pdf()
+    ...
+
+* The :meth:`pylinac.planar_imaging.LeedsTOR.analyze` method has an additional parameter: `angle_offset`. From analyzing multiple Leeds images, it has become
+  apparent that the low contrast ROIs are not always perfectly set relative to the phantom. This parameter will allow the user
+  to fine-tune the analysis to perfectly overlay the low contrast ROIs by adding an additional angle offset to the analysis.
+
+Winston-Lutz
+^^^^^^^^^^^^
+
+* Closes enhancement `#63 <https://github.com/jrkerns/pylinac/issues/63>`_ Files can now have the axis settings interpreted via the file name.
+  E.g: "myWL_gantry90_coll0_couch340.dcm". See :ref:`using_file_names_wl` for further info.
+* The `x/y/z_offset` properties of the WLImages which were deprecated many versions ago have finally been removed.
+* The `collimator/gantry_sag` and associated `plot_gantry_sag` methods have been deprecated. A similar method has been implemented that utilizes the RMS deviation.
+  To achieve the "gantry sag" using RMS errors use the method `axis_rms_deviation` with parameter `value='range'`.
+
+TG-51
+^^^^^
+
+* The Electron class has been adjusted to reflect the `Muir & Rodgers 2014`_ kecal data which allows the user to calculate kQ from just R50 data.
+* The `kq` function now accepts an `r_50` parameter to calculate kQ based on the above data.
+
+.. _Muir & Rodgers 2014: http://onlinelibrary.wiley.com/doi/10.1118/1.4893915/abstract
+
+Core Modules
+^^^^^^^^^^^^
+
+* The `Image` class has been fully depricated and is no longer available. Use the functions available in the :module:`pylinac.core.image` module instead.
+  See the version 1.4.0 release notes for further details.
+* The `remove_edges` method has been deprecated and is now an alias for `crop`. The `crop` method should be used instead. Parameters are exactly the same.
+
+V 1.9.0
+-------
+
+General Changes
+^^^^^^^^^^^^^^^
+
+* This release introduces PDF reports for most major modules. All classes with this functionality
+  have been given a ``publish_pdf`` method. This method takes an output filename and other optional
+  data like the author, machine/unit, and any custom notes. See e.g. :meth:`pylinac.starshot.Starshot.publish_pdf`
+  or :meth:`pylinac.picketfence.PicketFence.publish_pdf`.
+* The watch/process functions have been tweaked to best work on one unit per run. Multiple units/machines should
+  have their own config files. A new article :ref:`task_scheduler` describes how to use the process function with Windows Task
+  Scheduler to regularly pull and analyze files.
+
+CatPhan
+^^^^^^^
+
+* The CatPhan classes, when passed a directory during instantiation, will search through the DICOM files
+  for Series UIDs and analyze the files of the most numerous UID. E.g. if a folder has 80 DICOM images including
+  one set of 60 CBCT images and a total of 20 VMAT and picket fence images, it will find the CBCT files via UID and analyze
+  those, leaving the other images/files alone. This is useful for when all QA images are simply dumped into one folder.
+* Raw, uncompressed CatPhan DICOM files can optionally be compressed to a ZIP file after analysis using the new ``zip_after``
+  argument in the ``analyze`` method.
+
+Watcher/Processer
+^^^^^^^^^^^^^^^^^
+
+* The ``watcher``/``process`` functions have been reworked to produce PDF files rather than PNG/txt files.
+* If upgrading the watch/process function from a previous pylinac version be sure to copy/amend the new default YAML config file
+  as new keywords have been added and using old YAML files will error out.
+* Several new configuration keywords have been changed/added. In the general section, ``use-classifier``
+  has been deprecated in favor of individual module keywords of the same name. This allows a user to use a
+  classifier for, say, picket fence images but not for winston lutz images. A ``unit`` keyword has been added
+  that specifies which unit the files should be considered to be from. This unit name is passed to the PDF
+  reports that are generated. If you have multiple units, make individual YAML configuration files, one for each
+  unit.
+* CatPhan, VMAT, and Winston-Lutz can now take raw, unzipped images as well as the usual ZIP archive. ZIP archives
+  are detected only by keywords as usual. For uncompressed CatPhan images, the analyzer will look for any CatPhan DICOM
+  file groups via UID (see above CatPhan section), analyze them, and then ZIP the images until no further sets can be found.
+  For VMAT and Winston-Lutz if the ``use-classifier`` setting is true their respective sections in the YAML configuration
+  then an image classifier is used to group images of the given type and then analyze them.
+
+v 1.8.0
+-------
+
+General Changes
+^^^^^^^^^^^^^^^
+
+* This release focuses solely on the CBCT/CatPhan module.
+* Pylinac now has a logo! Check out the readme on github or landing page on ReadTheDocs.
+
+Watcher/Processer
+^^^^^^^^^^^^^^^^^
+
+* The cbct analysis section has been renamed to ``catphan``. Thus, the YAML config file needs to look like the
+  following::
+
+    # other sections
+    ...
+
+    catphan:  # not cbct:
+        ...
+
+    ...
+
+
+CBCT/CatPhan
+^^^^^^^^^^^^
+
+* The Python file/module has been renamed to ``ct`` from ``cbct``. E.g.::
+
+    from pylinac.ct import ...
+
+  Most users import directly from pylinac, so this should affect very few people. This was done to generalize
+  the module to make way for other CT/CBCT phantoms that pylinac may support in the future.
+* The CBCT module can now support analysis of the CatPhan 600.
+* Automatic detection of the phantom is no longer be performed. Previously, it depended on the
+  manufacturer to determine the phantom (Varian->504, Elekta->503), but that did not consider users scanning the
+  CatPhan in their CT scanners, which would give inconsistent results.
+* Due to the above, separate classes have been made for the CatPhan models. I.e. flow looks like this now::
+
+    # old way
+    from pylinac import CBCT
+    ...
+
+    # new way
+    from pylinac import CatPhan504, CatPhan600
+    cat504 = CatPhan504('my/folder')
+    cat600 = CatPhan600.from_zip('my/zip.zip')
+
+* A classifier has been generated for each CatPhan. Thus, if loading a 503, a 503 classifier will be used, rather
+  than a general classifier for all phantoms.
+* The ``use_classifier`` parameter has been moved from the ``analyze()`` method to the class instantiation
+  methods like so::
+
+    from pylinac import CatPhan504
+    cat504 = CatPhan504('my/folder', use_classifier=True)
+    cat504.analyze()  # no classifier argument
+
+* MTF is now more consistently calculated. Previously, it would simply look at the first 6 line pair regions.
+  In cases of low mA or very noisy images, finding the last few regions would error out or give inconsistent results.
+  Contrarily, high dose/image quality scans would only give MTF down to ~50% since the resolution was so good.
+  Now, MTF is searched for region-by-region until it cannot find the correct amount of peaks and valleys, meaning it
+  is now lost in the noise. This means high-quality scans will find and calculate MTF over more regions and fewer for
+  low-quality scans. In general, this makes the MTF plot much more consistent and usually always gives the RMTF down to
+  0-20%.
+* Individual modules are now only composed of 1 slice rather than averaging the nearby slices. Previously, for consistency,
+  a given module (e.g. CTP404) would find the correct slice and then average the pixel values of the slices on either side
+  of it to reduce noise and give more consistent results. The drawback of this method is that results that depend on the
+  noise of the image are not accurate, and signal/noise calculations were always higher than reality if only looking at
+  one slice.
+
+
+v 1.7.2
+-------
+
+* Fixed `(#78) <https://github.com/jrkerns/pylinac/issues/78>`_ - Certain CBCT datasets have irregular background
+  values. Additionally, the dead space in the square CT dataset outside the field of view can also be very different
+  from the air background. This fix analyzes the dataset for the air background value and uses that as a baseline value
+  to use as a CatPhan detection threshold.
+
+V 1.7.0
+-------
+
+General Changes
+^^^^^^^^^^^^^^^
+
+* The underlying structure of the watcher script has been changed to use a different framework. This change allows
+  for analysis of existing files within the directory of interest.
+* A new module has been introduced: ``tg51``, handling several common equations and data processing for things
+  relating to TG-51 absolute dose calibration such as Kq, PDDx, Dref, pion, ptp, etc. It also comes with classes for
+  doing a full TG-51 calculation for photons and electrons with cylindrical chambers.
+
+Log Analyzer
+^^^^^^^^^^^^
+
+* The log analyzer has changed from having a main class of ``MachineLog``, to the two distinct log types:
+  ``Dynalog`` and ``TrajectoryLog``. These classes are used the same way as machinelog, but obviously is meant for
+  one specific type of log. This allows for cleaner source code as the ``MachineLog`` class had large swaths of
+  if/else clauses for the two log types. But don't worry! If you're unsure of the log type or need to handle both
+  types then a helper function has been made: ``load_log``. This function will load a log just like the ``MachineLog``
+  did and as the new classes. The difference is it will do automatic log type detection, returning either a Dynalog
+  instance or TrajectoryLog instance. The ``MachineLogs`` class remains unchanged.
+* More specific errors have been introduced; specifically ``NogALogError``, ``NotADynalogError``, and ``DynalogMatchError``
+  which are self-explanatory and more specific than ``IOError``.
+* Fixed `(#74) <https://github.com/jrkerns/pylinac/issues/74>`_ which was causing Dynalogs with patient names containing
+  a "V" to be classified as Trajectory logs.
+* Fixed `(#75) <https://github.com/jrkerns/pylinac/issues/75>`_ which was skewing gamma pass percent values.
+
+Planar Imaging
+^^^^^^^^^^^^^^
+
+* The ``PipsProQC3`` class/phantom has been refactored to correctly reflect its manufacturer to Standard Imaging,
+  thus the class has been renamed to ``StandardImagingQC3``.
+
+Directory Watching
+^^^^^^^^^^^^^^^^^^
+
+* The ``watch`` command line argument now has a sister function, available in a regular Python program:
+  :func:`~pylinac.watcher.watch`.
+  With this command you can run the directory watcher programmatically, perfect for continuous log monitoring.
+* A new command line argument is available: ``process``. This command is also available in Python as
+  :func:`~pylinac.watcher.process`
+  which can be called on a directory either through the command line or programmatically and will analyze a
+  folder once and then exit, perfect for analyzing a new monthly dataset.
+* The structure of querying for files has been changed significantly. Instead of triggering on file changes (e.g. adding a
+  new file to the directory), the watcher now constantly queries for new files at a specified interval. This means that
+  when started, the watcher will analyze existing files in the folder, not just new ones.
+* Information given in the email has been modified for logs, which may potentially contain PHI. Instead of the
+  entire log file name given, only the timestamp is given. Additionally, the logs are no longer attached to the email.
+
+
+V 1.6.0
+-------
+
+General Changes
+^^^^^^^^^^^^^^^
+
+* Changed the default colormap of dicom/grayscale images to be "normal" gray vs the former inverted gray.
+  Brought up in `(#70) <https://github.com/jrkerns/pylinac/issues/70>`_ .
+* Added a colormap setting that can be changed. See :ref:`changing_colormaps`
+* Added a utility function :func:`~pylinac.core.utilities.clear_data_files` to clear demo files and classifier files.
+  This may become useful for classifier updates. I.e. the classifier for a given algorithm can be cleared and updated as need be, without the
+  need for a new package release. More information on this will follow as the use of classifiers becomes normal.
+* Added a dependency to the pylinac requirements: `scikit-learn <http://scikit-learn.org/stable/>`_. This library will allow for machine learning
+  advancements to be used with pylinac. I am aware of the increasing number of dependencies; pylinac has reached
+  a plateau I believe in terms of advancement and I hope that this is the last major dependency to be added.
+
+Winston-Lutz
+^^^^^^^^^^^^
+
+* `(#69) <https://github.com/jrkerns/pylinac/issues/69>`_ Added EPID position tracking. Now the EPID location will show up in images and will
+  give an output value when printing the summary. Relevant methods like :meth:`~pylinac.winston_lutz.WinstonLutz.cax2epid_distance` and
+  :meth:`~pylinac.winston_lutz.WinstonLutz.epid_sag`, and :meth:`~pylinac.winston_lutz.WinstonLutz.plot_epid_sag` have been added.
+  The summary plot has also been changed to include two sag plots: one for the gantry and one for the EPID.
+* Certain properties of WL images have been deprecated. ``x_offset`` has been replaced by :func:`~pylinac.winston_lutz.WLImage.bb_x_offset` and respectively
+  for the other axes. Usage of the old properties will raise a deprecation warning and will be removed in v1.7.
+
+  .. note::
+
+    The deprecation warnings may not show up, depending on your python version and/or warning settings. See
+    the `python docs <https://docs.python.org/3.5/library/warnings.html#warning-categories>`_ for more info.
+
+CBCT
+^^^^
+
+* Added a Support Vector Machine classifier option for finding the HU slice. The classifier is faster (~30%) than
+  the brute force method. This option is available as a parameter in the :meth:`~pylinac.cbct.CBCT.analyze` method as ``use_classifier``.
+  In the event the classifier does not find any relevant HU slices, it will gracefully fall back to the brute force
+  method with a runtime warning. Because of the fallback feature, the classifier is now used first by default.
+  Using the classifier requires a one-time download to the demo folder, which happens automatically; just make sure
+  you're connected to the internet.
+
+Picket Fence
+^^^^^^^^^^^^
+
+* An ``orientation`` keyword argument was added to the :meth:`~pylinac.picketfence.PicketFence.analyze` method. This defaults to ``None``,
+  which does an automatic determination (current behavior). In the event that the determined orientation was wrong, this argument can be utilized.
+
+Watcher Service
+^^^^^^^^^^^^^^^
+
+* A new option has been added to the ``general`` section: ``use-classifier``. This option tells pylinac whether
+  to use an SVM image classifier to determine the type of image passed. This allows the user not to worry about the
+  file names; the images can be moved to the monitored folder without regard to naming. The use of the classifier
+  does not exclude file naming conventions. If the classifier does not give a good prediction, the algorithm will
+  gracefully fall back to the file name convention.
+
+  The following image types currently support automatic detection:
+
+  - Picket Fence
+  - Starshot
+  - Leeds TOR
+  - PipsPro QC-3
+
+V 1.5.6
+-------
+
+* Adds the ``dtype`` keyword to ``DicomImage``'s init method.
+* `(#66) <https://github.com/jrkerns/pylinac/issues/66>`_ - Fixed an issue with Winston-Lutz
+  isocenters not calculating correctly.
+* `(#68) <https://github.com/jrkerns/pylinac/issues/68>`_ - Fixed the order of the Winston-Lutz images when plotted.
+* Many thanks to Michel for noting the WL errors and `submitting the first external pull request <https://github.com/jrkerns/pylinac/pull/67>`_ !
+* Fixed several small bugs and runtime errors.
+
 V 1.5.5
 -------
 

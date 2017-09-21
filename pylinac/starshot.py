@@ -20,6 +20,7 @@ Features:
   do an adaptive search by adjusting parameters to find a "reasonable" wobble.
 """
 import copy
+import io
 import os.path as osp
 
 import matplotlib.pyplot as plt
@@ -29,9 +30,10 @@ from scipy import optimize
 from .core import image
 from .core.decorators import value_accept
 from .core.geometry import Point, Line, Circle
-from .core.io import get_url, TemporaryZipDirectory
+from .core.io import get_url, TemporaryZipDirectory, retrieve_demo_file
+from .core import pdf
 from .core.profile import SingleProfile, CollapsedCircleProfile
-from .core.utilities import retrieve_demo_file
+from .settings import get_dicom_cmap
 
 
 class Starshot:
@@ -193,7 +195,7 @@ class Starshot:
         tolerance : int, float, optional
             The tolerance in mm to test against for a pass/fail result.
         start_point : 2-element iterable, optional
-            A point where the algorithm should use for determining the circle profile.
+            The point where the algorithm should center the circle profile, given as (x-value, y-value).
             If None (default), will search for a reasonable maximum point nearest the center of the image.
         fwhm : bool
             If True (default), the center of the FWHM of the spokes will be determined.
@@ -318,10 +320,10 @@ class Starshot:
         string
             A string with a statement of the minimum circle.
         """
-        string = ('\nResult: %s \n\n'
-                  'The minimum circle that touches all the star lines has a diameter of %4.3g mm. \n\n'
-                  'The center of the minimum circle is at %4.1f, %4.1f') % (self._passfail_str, self.wobble.radius_mm*2,
-                                                                            self.wobble.center.x, self.wobble.center.y)
+        string = ('\nResult: {} \n\n' +
+                  'The minimum circle that touches all the star lines has a diameter of {:2.3f} mm. \n\n' +
+                  'The center of the minimum circle is at {:3.1f}, {:3.1f}').format(self._passfail_str, self.wobble.radius_mm*2,
+                                                                                    self.wobble.center.x, self.wobble.center.y)
         return string
 
     def plot_analyzed_image(self, show=True):
@@ -358,7 +360,7 @@ class Starshot:
         if ax is None:
             fig, ax = plt.subplots()
         # show analyzed image
-        ax.imshow(self.image.array, cmap=plt.cm.Greys)
+        ax.imshow(self.image.array, cmap=get_dicom_cmap())
         self.lines.plot(ax)
         self.wobble.plot2axes(ax, edgecolor='green')
         self.circle_profile.plot2axes(ax, edgecolor='green')
@@ -407,6 +409,47 @@ class Starshot:
         self.plot_analyzed_subimage(subimage=subimage, show=False)
         plt.savefig(filename, **kwargs)
 
+    def publish_pdf(self, filename=None, author=None, unit=None, axis_measured='N/A', notes=None, open_file=False):
+        """Publish (print) a PDF containing the analysis and quantitative results.
+
+        Parameters
+        ----------
+        filename : (str, file-like object}
+            The file to write the results to.
+        unit : str, optional
+            Name of the unit that made the image/data.
+        author : str, optional
+            The author of the analysis; for tracking who did what.
+        axis_measured : str
+            The axis measured; e.g. collimator.
+        notes : str, list of strings
+            Text; if str, prints single line.
+            If list of strings, each list item is printed on its own line.
+        """
+        if filename is None:
+            filename = self.image.pdf_path
+        from reportlab.lib.units import cm
+        canvas = pdf.create_pylinac_page_template(filename, file_name=osp.basename(self.image.path),
+                                                  file_created=self.image.date_created(),
+                                                  analysis_title='Starshot Analysis', author=author, unit=unit)
+        for img, height in zip(('wobble', 'asdf'), (2, 11.5)):
+            data = io.BytesIO()
+            self.save_analyzed_subimage(data, img)
+            img = pdf.create_stream_image(data)
+            canvas.drawImage(img, 4 * cm, height * cm, width=13*cm, height=13*cm, preserveAspectRatio=True)
+        text = ['Starshot results:',
+                'Source-to-Image Distance (mm): {:2.0f}'.format(self.image.sid),
+                'Tolerance (mm): {:2.1f}'.format(self.tolerance),
+                "Minimum circle diameter (mm): {:2.2f}".format(self.wobble.radius_mm*2),
+                ]
+        if axis_measured != 'N/A':
+            text.append("Axis measured: " + axis_measured)
+        pdf.draw_text(canvas, x=10*cm, y=25.5*cm, text=text, fontsize=12)
+        if notes is not None:
+            pdf.draw_text(canvas, x=1 * cm, y=5.5 * cm, fontsize=14, text="Notes:")
+            pdf.draw_text(canvas, x=1 * cm, y=5 * cm, text=notes)
+        pdf.finish(canvas, open_file=open_file, filename=filename)
+
     @staticmethod
     def run_demo():
         """Demonstrate the Starshot module using the demo image."""
@@ -429,6 +472,7 @@ class Wobble(Circle):
 
     @property
     def diameter_mm(self):
+        """Diameter of the wobble in mm."""
         return self.radius_mm*2
 
 

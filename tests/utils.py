@@ -3,12 +3,11 @@ from io import BytesIO, StringIO
 import multiprocessing
 import os
 import os.path as osp
+import pprint
 import time
 from tempfile import TemporaryDirectory
 
 from pylinac.core import image
-
-DATA_BANK_DIR = osp.abspath(osp.join('..', '..', 'pylinac test files'))
 
 
 def save_file(method, *args, as_file_object=None, **kwargs):
@@ -56,26 +55,26 @@ class LoadingTestBase:
     """This class can be used as a base for a module's loading test class."""
     klass = object
     constructor_input = None
-    demo_method = 'from_demo_image'
+    demo_load_method = 'from_demo_image'
     url = None
     zip = None
     kwargs = {}
 
     @property
-    def real_url(self):
-        return 'https://s3.amazonaws.com/assuranceqa-staging/uploads/imgs/' + self.url
+    def full_url(self):
+        return 'https://s3.amazonaws.com/pylinac/' + self.url
 
     def test_consructor(self):
         if self.constructor_input is not None:
             self.klass(self.constructor_input, **self.kwargs)
 
     def test_from_demo(self):
-        if self.demo_method is not None:
-            getattr(self.klass, self.demo_method)()
+        if self.demo_load_method is not None:
+            getattr(self.klass, self.demo_load_method)()
 
     def test_from_url(self):
         if self.url is not None:
-            self.klass.from_url(self.real_url, **self.kwargs)
+            self.klass.from_url(self.full_url, **self.kwargs)
 
     def test_from_zip(self):
         if self.zip is not None:
@@ -97,14 +96,16 @@ class DataBankMixin:
     Some test runs, seemingly due to the executor, bog down when running a very large number of files. By opening a new executor at
     every directory, memory leaks are minimized.
     """
+    DATA_BANK_DIR = osp.abspath(osp.join(osp.abspath(__file__), '..', '..', '..', 'pylinac test files'))
     DATA_DIR = []
     executor = 'ProcessPoolExecutor'
     workers = multiprocessing.cpu_count() - 1
     print_success_path = False
+    write_failures_to_file = False
 
     @classmethod
     def setUpClass(cls):
-        cls.DATA_DIR = osp.join(DATA_BANK_DIR, *cls.DATA_DIR)
+        cls.DATA_DIR = osp.join(cls.DATA_BANK_DIR, *cls.DATA_DIR)
         if not osp.isdir(cls.DATA_DIR):
             raise NotADirectoryError("Directory {} is not valid".format(cls.DATA_DIR))
 
@@ -124,7 +125,7 @@ class DataBankMixin:
         func : A function that processes the filepath and determines if it passes. Must return ``Success`` if passed.
         """
         passes = 0
-        fails = 0
+        fails = []
         start = time.time()
         futures = {}
         # open an executor
@@ -146,8 +147,15 @@ class DataBankMixin:
                     if self.print_success_path:
                         stuff_to_print.append(futures[future])
                 else:
-                    fails += 1
+                    fails += [futures[future]]
                 print(*stuff_to_print)
 
         end = time.time() - start
-        print('Processing of {} files took {:3.1f}s. {} passed; {} failed.'.format(test_num, end, passes, fails))
+        print('Processing of {} files took {:3.1f}s ({:3.2f}s/item). {} passed; {} failed.'.format(test_num, end, end/test_num, passes, len(fails)))
+        if len(fails) > 0:
+            pprint.pprint("Failures: {}".format(fails))
+            if self.write_failures_to_file:
+                with open('failures_{}.txt'.format(osp.basename(self.DATA_DIR)), mode='w') as f:
+                    for file in fails:
+                        f.write(file + '\n')
+                print("Failures written to file")
