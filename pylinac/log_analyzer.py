@@ -23,7 +23,6 @@ import collections
 import concurrent.futures
 import copy
 import csv
-from datetime import datetime
 from functools import lru_cache
 import gc
 import itertools
@@ -42,7 +41,7 @@ from .core import image
 from .core import io
 from .core.decorators import type_accept, value_accept
 from .core import pdf
-from .core.utilities import is_iterable, import_mpld3, decode_binary, Structure
+from .core.utilities import is_iterable, decode_binary, Structure
 
 STATIC_IMRT = 'Static IMRT'
 DYNAMIC_IMRT = 'Dynamic IMRT'
@@ -307,50 +306,42 @@ class Axis:
         else:
             raise AttributeError("Expected positions not passed to Axis")
 
-    def plot_actual(self, interactive=False):
+    def plot_actual(self):
         """Plot the actual positions as a matplotlib figure."""
-        self._plot('actual', interactive=interactive)
+        self._plot('actual')
 
-    def save_plot_actual(self, filename, interactive=False, **kwargs):
+    def save_plot_actual(self, filename, **kwargs):
         self._plot('actual', show=False)
-        self._save(filename, interactive, **kwargs)
+        self._save(filename, **kwargs)
 
-    def plot_expected(self, interactive=False):
+    def plot_expected(self):
         """Plot the expected positions as a matplotlib figure."""
-        self._plot('expected', interactive=interactive)
+        self._plot('expected')
 
-    def save_plot_expected(self, filename, interactive=False, **kwargs):
+    def save_plot_expected(self, filename, **kwargs):
         self._plot('expected', show=False)
-        self._save(filename, interactive, **kwargs)
+        self._save(filename, **kwargs)
 
-    def plot_difference(self, interactive=False):
+    def plot_difference(self):
         """Plot the difference of positions as a matplotlib figure."""
-        self._plot('difference', interactive=interactive)
+        self._plot('difference')
 
-    def save_plot_difference(self, filename, interactive=False, **kwargs):
+    def save_plot_difference(self, filename, **kwargs):
         self._plot('difference', show=False)
-        self._save(filename, interactive, **kwargs)
+        self._save(filename, **kwargs)
 
     @value_accept(param=('actual', 'expected', 'difference'))
-    def _plot(self, param='', interactive=False, show=True):
+    def _plot(self, param='', show=True):
         """Plot the parameter: actual, expected, or difference."""
         plt.plot(getattr(self, param))
-        plt.grid('on')
+        plt.grid(True)
         plt.autoscale(axis='x', tight=True)
         if show:
-            if interactive:
-                mpld3 = import_mpld3()
-                mpld3.show()
-            else:
-                plt.show()
+            plt.show()
 
-    def _save(self, filename, interactive, **kwargs):
+    def _save(self, filename, **kwargs):
         """Save the figure to a file, either .png or .html."""
-        if interactive:
-            mpld3 = import_mpld3()
-            mpld3.save_html(plt.gcf(), filename)
-        else:
-            plt.savefig(filename, **kwargs)
+        plt.savefig(filename, **kwargs)
 
 
 class AxisMovedMixin:
@@ -448,9 +439,9 @@ class FluenceBase:
          """
         height = MLC_FOV_HEIGHT_MM if not self._mlc.hdmlc else HDMLC_FOV_HEIGHT_MM
         if equal_aspect:
-            fluence = np.zeros((int(height/resolution), int(MLC_FOV_WIDTH_MM/resolution)), dtype=np.float16)
+            fluence = np.zeros((int(height/resolution), int(MLC_FOV_WIDTH_MM/resolution)), dtype=np.float)
         else:
-            fluence = np.zeros((self._mlc.num_pairs, int(MLC_FOV_WIDTH_MM / resolution)), dtype=np.float16)
+            fluence = np.zeros((self._mlc.num_pairs, int(MLC_FOV_WIDTH_MM / resolution)), dtype=np.float)
 
         self.array = fluence
         self.resolution = resolution
@@ -527,6 +518,9 @@ class FluenceBase:
                     fluence[width[0]:width[1], :] = np.tile(fluence_line, [width[1] - width[0], 1])
                 else:
                     fluence[pair - 1, :] = fluence_line
+
+        # extend to the max MU; for dynalogs this is 1 since it's relative. For Tlogs, it's the absolute MU.
+        fluence *= np.max(mu_matrix)
 
         return fluence
 
@@ -1436,7 +1430,7 @@ class LogBase:
                     align='center')
         ax.set_title(title, fontsize=fontsize)
         ax.tick_params(axis='both', labelsize=labelsize)
-        ax.grid('on')
+        ax.grid(True)
         if show:
             plt.show()
 
@@ -1697,7 +1691,8 @@ class Dynalog(LogBase):
         if not self._has_other_file:
             raise DynalogMatchError("Didn't find the matching dynalog file")  # TODO: clean up
 
-        dlgdata = [line for line in csv.reader(open(self.a_logfile), delimiter=',')]
+        with open(self.a_logfile) as a_log:
+            dlgdata = [line for line in csv.reader(a_log, delimiter=',')]
         self.header = DynalogHeader(dlgdata)
         self.axis_data = DynalogAxisData(self, dlgdata)
         self.fluence = FluenceStruct(self.axis_data.mlc, self.axis_data.mu, self.axis_data.jaws)
@@ -2159,7 +2154,7 @@ class TrajectoryLog(LogBase):
     @property
     def is_hdmlc(self):
         """Whether the machine has an HDMLC or not."""
-        return self.header.mlc_model == 2
+        return self.header.mlc_model == 3
 
 
 def anonymize(source, inplace=False, destination=None, recursive=True):

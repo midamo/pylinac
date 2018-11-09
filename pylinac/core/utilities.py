@@ -3,11 +3,15 @@ from collections import Iterable
 import decimal
 import os
 import os.path as osp
+import subprocess
 import struct
+from typing import Union, Sequence
 
-import dicom
+import pydicom
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler
+
+from .typing import NumberLike
 
 
 def clear_data_files():
@@ -21,7 +25,7 @@ def clear_data_files():
     print("Pylinac data files cleared.")
 
 
-def assign2machine(source_file, machine_file):
+def assign2machine(source_file: str, machine_file: str):
     """Assign a DICOM RT Plan file to a specific machine. The source file is overwritten to contain
     the machine of the machine file.
 
@@ -34,14 +38,14 @@ def assign2machine(source_file, machine_file):
         Path to a DICOM RTPlan file that has the desired machine. This is easily obtained from pushing a plan from the TPS
         for that specific machine. The file must contain at least one valid field.
     """
-    dcm_source = dicom.read_file(source_file)
-    dcm_machine = dicom.read_file(machine_file)
+    dcm_source = pydicom.dcmread(source_file)
+    dcm_machine = pydicom.dcmread(machine_file)
     for beam in dcm_source.BeamSequence:
         beam.TreatmentMachineName = dcm_machine.BeamSequence[0].TreatmentMachineName
     dcm_source.save_as(source_file)
 
 
-def is_close(val, target, delta=1):
+def is_close(val: NumberLike, target: Union[NumberLike, Sequence], delta: NumberLike=1):
     """Return whether the value is near the target value(s).
 
     Parameters
@@ -67,15 +71,6 @@ def is_close(val, target, delta=1):
     return False
 
 
-def import_mpld3():
-    """Try importing MPLD3. Raises error if not installed. Returns the MPLD3 library."""
-    try:
-        import mpld3
-    except ImportError:
-        raise ImportError("The MPLD3 library must be installed to make interactive plots. See http://mpld3.github.io/index.html for info.")
-    return mpld3
-
-
 def typed_property(name, expected_type_or_tuple_of_types):
     """Type-enforced property. Python Cookbook 9.21 (3rd ed)."""
     storage_name = '_' + name
@@ -93,57 +88,11 @@ def typed_property(name, expected_type_or_tuple_of_types):
     return prop
 
 
-def simple_round(number, decimals=0):
+def simple_round(number: NumberLike, decimals: int=0):
     """Round a number to the given number of decimals. Fixes small floating number errors."""
     num = int(round(number * 10 ** decimals))
     num /= 10 ** decimals
     return num
-
-
-def is_dicom(file):
-    """Boolean specifying if file is a proper DICOM file.
-
-    This function is a pared down version of read_preamble meant for a fast return.
-    The file is read for a proper preamble ('DICM'), returning True if so,
-    and False otherwise. This is a conservative approach.
-
-    Parameters
-    ----------
-    file : str
-        The path to the file.
-
-    See Also
-    --------
-    pydicom.filereader.read_preamble
-    pydicom.filereader.read_partial
-    """
-    fp = open(file, 'rb')
-    preamble = fp.read(0x80)
-    prefix = fp.read(4)
-    return prefix == b"DICM"
-
-
-def is_dicom_image(file):
-    """Boolean specifying if file is a proper DICOM file with a image
-
-    Parameters
-    ----------
-    file : str
-        The path to the file.
-
-    See Also
-    --------
-    pydicom.filereader.read_preamble
-    pydicom.filereader.read_partial
-    """
-    result = False
-    try:
-        img = dicom.read_file(file, force=True)
-        img.pixel_array
-        result = True
-    except:
-        pass
-    return result
 
 
 def isnumeric(object):
@@ -235,3 +184,15 @@ def decode_binary(file, dtype, num_values=1, cursor_shift=0):
     if cursor_shift:
         f.seek(cursor_shift, 1)
     return output
+
+
+def open_path(path: str):
+    """Open the specified path in the system default viewer."""
+
+    if os.name == 'darwin':
+        launcher = "open"
+    elif os.name == 'posix':
+        launcher = "xdg-open"
+    elif os.name == 'nt':
+        launcher = "explorer"
+    subprocess.call([launcher, path])
